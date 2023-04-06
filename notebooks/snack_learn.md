@@ -101,7 +101,9 @@ def generate_global_features(n_category, n_customer, normal_dist = [(1.5, 0.1),(
     global_feature = jnp.concatenate([gender_array.repeat(2, axis=0).reshape(n_customer, n_category, 1), category_freq_array], axis=-1)
     return global_feature
 np.random.seed(0)
+n_customer_test = 100
 global_feature = generate_global_features(n_category, n_customer)
+test_global_feature = generate_global_features(n_category, n_customer_test)
 ```
 
 ```python
@@ -119,6 +121,7 @@ global_feature_df = convert_global_feature_to_df(global_feature, ['razor', 'foun
 def generate_category_feature(n_category, n_customer):
     return jnp.ones((n_customer, n_category, 1))
 category_feature = generate_category_feature(n_category, n_customer)
+test_category_feature = generate_category_feature(n_category, n_customer_test)
 ```
 
 ```python
@@ -132,7 +135,7 @@ def compute_purchase_probability(global_feature, category_feature, global_coef, 
     # global_feature: (n_customer, n_category, n_feature)
     # category_feature: (n_customer, n_category, n_feature)
     # global_coef: (n_feature)
-    # category_effect_coef: (n_customer, n_feature)
+    # category_effect_coef: (n_customer, n_feature)``
     # return: (n_customer, n_category)
     preference_score = jnp.matmul(global_feature, global_coef) + jnp.matmul(category_feature, jnp.expand_dims(category_effect_coef, axis=-1)).squeeze(axis=-1)
     purchase_prob = SigmoidTransform()(preference_score)
@@ -148,6 +151,11 @@ def convert_purchase_prob_to_df(purchase_prob, categories, column_name='purchase
 purchase_prob = compute_purchase_probability(global_feature, category_feature, alpha, beta)
 sampling_y = dist.Bernoulli(probs=purchase_prob).sample(random.PRNGKey(0), sample_shape=(n_samples, ))
 purchase_prob_df = convert_purchase_prob_to_df(purchase_prob, ['razor', 'foundation'])
+```
+
+```python
+purchase_prob_test = compute_purchase_probability(test_global_feature, test_category_feature, alpha, beta)
+purchase_prob_test_df = convert_purchase_prob_to_df(purchase_prob_test, ['razor', 'foundation'])
 ```
 
 ## Inspect the feature table
@@ -201,7 +209,7 @@ where we use the following notations
 2. Category purchase frequency is also a global effect, and the corresponding coefficient $\alpha_2$ remains the same as well across all customers and all categories.
 3. The interception term is with subscription of customer $u$, aiming to capture category effects caused by different customers. Thus, $\beta$ will be in shape of (n_customer, )
 
-<div style="text-align:center">
+<div style="text-align:center" heighr="400">
 
 ![causalDAG](../images/causalDAG_with_color.png)
 
@@ -235,8 +243,13 @@ def category_choice(
 
     """
     # define the transformed distribution for alpha
-    alpha_mu = numpyro.sample("alpha_mu", dist.Normal(loc=jnp.zeros(n_global_feature), scale=jnp.ones(n_global_feature)))
-    alpha_sigma = numpyro.sample("alpha_sigma", dist.HalfNormal(scale=jnp.ones(n_global_feature)))
+    alpha_mu = numpyro.sample(
+        "alpha_mu", 
+        dist.Normal(loc=jnp.zeros(n_global_feature), 
+        scale=jnp.ones(n_global_feature)))
+    alpha_sigma = numpyro.sample(
+        "alpha_sigma", 
+        dist.HalfNormal(scale=jnp.ones(n_global_feature)))
     # generate coefficients for global effect
     alpha = numpyro.sample(
         'alpha',
@@ -255,8 +268,13 @@ def category_choice(
     # this plate restricts the column dimension of the customer coefficient matrix
     plate_category_feature = numpyro.plate("category_feature", n_category_feature, dim=-1)
     with plate_customer, plate_category_feature:
-        beta_mu = numpyro.sample("beta_mu", dist.Normal(loc=jnp.zeros((n_customer, n_category_feature)), scale=jnp.ones((n_customer, n_category_feature))))
-        beta_sigma = numpyro.sample("beta_sigma", dist.HalfNormal(scale=jnp.ones((n_customer, n_category_feature))))
+        beta_mu = numpyro.sample(
+            "beta_mu", 
+            dist.Normal(loc=jnp.zeros((n_customer, n_category_feature)), 
+            scale=jnp.ones((n_customer, n_category_feature))))
+        beta_sigma = numpyro.sample(
+            "beta_sigma", 
+            dist.HalfNormal(scale=jnp.ones((n_customer, n_category_feature))))
         beta = numpyro.sample(
             'beta',
             dist.Normal(beta_mu, beta_sigma),
@@ -330,7 +348,7 @@ learnt_beta = mcmc._states['z']['beta'].mean(axis=1).reshape(n_customer, 1)
 
 ```python
 # Use the learnt parameter to compute the purchase probability
-learnt_prob = compute_purchase_probability(global_feature, category_feature, learnt_alpha, learnt_beta)
+learnt_prob = compute_purchase_probability(test_global_feature, test_category_feature, learnt_alpha, learnt_beta)
 learnt_prob_df = convert_purchase_prob_to_df(learnt_prob, ['razor', 'foundation'], column_name='purchase_probability')
 learnt_prob_df.head()
 ```
@@ -338,7 +356,7 @@ learnt_prob_df.head()
 We put the dataframe of true purchase probability side-by-side with the dataframe of predicted purchase probability
 
 ```python
-prob_comparison_df = pd.concat([purchase_prob_df, learnt_prob_df])
+prob_comparison_df = pd.concat([purchase_prob_test_df, learnt_prob_df])
 prob_comparison_df.loc[:, 'label'] = np.repeat(['true', 'pred'], n_customer * 2)
 
 def plot_prob_comparison(df: pd.DataFrame, group_column:str, filter: tuple, ax):
@@ -348,6 +366,7 @@ def plot_prob_comparison(df: pd.DataFrame, group_column:str, filter: tuple, ax):
     ax.text(0.1, 0.1, s='mape: {:.2f}'.format(mape.iloc[0]), fontsize=10)
     ax.text(1.1, 0.1, s='mape: {:.2f}'.format(mape.iloc[1]), fontsize=10)
     ax.set_title('purchase probability for {} {}'.format(*filter))
+    ax.set_ylim(0.05, 0.75)
 
 f, ax = plt.subplots(1, 2, figsize=(12, 5))
 plot_prob_comparison(prob_comparison_df, 'category', ('gender', 1), ax[0])
@@ -362,7 +381,9 @@ We could also leverage the samples from MCMC simulation for prediction or even c
 # get posterior samples
 posterior_samples = mcmc.get_samples()
 predictive = Predictive(category_choice, posterior_samples)
-prediction = predictive(rng_key, X_global_feature, X_category_feature)["category_choice"]
+X_test_global_feature = jnp.expand_dims(test_global_feature, axis=0).repeat(n_samples, axis=0)
+X_test_category_feature = jnp.expand_dims(test_category_feature, axis=0).repeat(n_samples, axis=0)
+prediction = predictive(rng_key, X_test_global_feature, X_test_category_feature)["category_choice"]
 # compute the mean of purchase choice for each customer to approximate the purchase probability
 prob_mean = prediction.mean(axis=[0,1])
 prob_mean_df = convert_purchase_prob_to_df(prob_mean, ['razor', 'foundation'], column_name='purchase_probability')
