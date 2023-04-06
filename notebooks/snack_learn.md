@@ -18,6 +18,7 @@ jupyter:
 
 ```python
 !pip install numpyro
+!pip install arviz
 !pip install numpy
 !pip install pandas
 !pip install matplotlib

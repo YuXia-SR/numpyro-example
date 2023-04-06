@@ -7,6 +7,7 @@ dependencies:
   - pip
   - python>=3.9
   - jupyterlab
+  - arviz
   - numpyro
   - numpy
   - pandas
