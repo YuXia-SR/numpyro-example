@@ -12,6 +12,20 @@ jupyter:
     name: python3
 ---
 
+<a target="_blank" href="https://colab.research.google.com/github/YuXia-SR/numpyro-example/blob/main/notebooks/snack_learn.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
+```python
+!pip install numpyro
+!pip install numpy
+!pip install pandas
+!pip install matplotlib
+!pip install seaborn
+!pip install scikit-learn
+!pip install statsmodels
+```
+
 ```python
 import jax.numpy as jnp
 import numpy as np
@@ -36,7 +50,7 @@ from sklearn.metrics import mean_absolute_percentage_error
 Probabilistic programming is a powerful tool for data scientists and statisticians that allows them to build complex models to make predictions based on uncertain or incomplete data. In this tutorial notebook, we will use the probabilistic programming library, Numpyro, to build a probabilistic model for predicting customer purchase probability in a retail marketing setup. The model will be based on historical data and will take into account several simple factors such as customer gender, product categories, and category purchase frequency. Through this Snack & Learn session, we will work to implement the model, analyze the results, and discuss potential improvements. By the end of the notebook, you will have an understanding of probabilistic programming and the ability to use Numpyro to build probabilistic models for your own predictive analysis.
 
 ## Review the model
-Following the same definition from the reference
+Following the same definition from the reference [1]
 1. $C_u$ means consumer $u$ selects the category $c$
 2. $B_{i, u}$ means consumer $u$ purchases product $i$
 3. $Q_{i, u}=q$ means consumer $u$’s purchase quantity of $i$ is q
@@ -85,7 +99,7 @@ def generate_global_features(n_category, n_customer, normal_dist = [(1.5, 0.1),(
 
     global_feature = jnp.concatenate([gender_array.repeat(2, axis=0).reshape(n_customer, n_category, 1), category_freq_array], axis=-1)
     return global_feature
-
+np.random.seed(0)
 global_feature = generate_global_features(n_category, n_customer)
 ```
 
@@ -137,6 +151,8 @@ purchase_prob_df = convert_purchase_prob_to_df(purchase_prob, ['razor', 'foundat
 
 ## Inspect the feature table
 
+We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations.
+
 ```python
 feature_table = global_feature_df.merge(purchase_prob_df)
 feature_table.head()
@@ -159,45 +175,17 @@ plot_distribution_from_df(feature_table, 'purchase_frequency', ax[0])
 plot_distribution_from_df(feature_table, 'purchase_probability', ax[1])
 ```
 
-We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations. We formulate a very naive and simple model for the purpose of better explanation.
-
-<p align="center">
-  <img height='380' src="../images/causalDAG_without_color.png">
-</p>
-
-Let's say we're using only the customer gender and purchase frequency of a specific category as the global features, and use intercept as the category coefficients. For a customer u and category i, we will compute the customer preference score as the following
-
-$$
-\begin{align}
-s_{ui} &= \alpha_1*Gender_u + \alpha_2*CategoryPurchaseFrequenc_{ui} + \beta_i\\
-\end{align}
-$$
-
-We use sigmoid function to limit the purchase probability well-defined in range of [0, 1]. To formulate it as a probabilistic outcome, we shall further define the generative distribution and corresponding parameter. Given that the purchase decision is a boolean outcome, we will use the Bernouli distribution and define the purchase probability $p_{ui}$ as the following
-
-$$
-\begin{align}
-p_{ui} &= sigmoid(s_{ui}), \\
-y_{ui} &\sim Bernouli(p_{ui})
-\end{align}
-$$
-
-
-
 We could directly pass the purchase probability matrix to bernouli distribution and sample the category choice for each customer.
 
 ```python
 y_example = dist.Bernoulli(probs=purchase_prob).sample(random.PRNGKey(0))
 purchase_decision_df = convert_purchase_prob_to_df(y_example, ['razor', 'foundation'], column_name='purchase_decision')
-```
-
-```python
 purchase_decision_df.head()
 ```
 
 # Model structure: Bayesian Hierarchical Linear Regression
 
-For the category decision, we use the same linear model defined above, and aim to estimate the coefficient $\alpha_1, \alpha_2, \beta_u$. For each customer $u$ and category $i$,
+For the category decision, we use a hierarchical linear model to approximate the purchase probability, and aim to estimate the coefficient $\alpha_1, \alpha_2, \beta_u$ defined below. For each customer $u$ and category $i$,
 
 $$
 \begin{align}
@@ -212,15 +200,22 @@ where we use the following notations
 2. Category purchase frequency is also a global effect, and the corresponding coefficient $\alpha_2$ remains the same as well across all customers and all categories.
 3. The interception term is with subscription of customer $u$, aiming to capture category effects caused by different customers. Thus, $\beta$ will be in shape of (n_customer, )
 
+<div style="text-align:center">
+
+![causalDAG](../images/causalDAG_with_color.png)
+
+</div>
+
 We will model the first two terms together as the global effect and last term as the category effect. The preference score $s_{ui}$ will be the summation of these two effects. We assume all coefficient priors follow a normal distribution with different mean and standard deviation.
 1. $\alpha_{1} \sim Normal(\mu_{\alpha_1}, \sigma^2_{\alpha_1})$, $\alpha_{2} \sim Normal(\mu_{\alpha_2}, \sigma^2_{\alpha_2})$
 2. We need to initialize a coefficient matrix for the term of category effect, with shape of (n_customer, ). For each $\beta_u$, $\beta_u \sim Normal(\mu_{\beta_u}, \sigma^2_{\beta_u})$
 
 
-</tr></table>
-<td>  <img height="400" src="../images/causalDAG_with_color.png">
-<td>  <img src="../images/modelDAG.png">
-</tr></table>
+<div style="text-align:center">
+
+![modelDAG](../images/modelDAG.png)
+
+</div>
 
 
 ## Implement the category choice model
@@ -406,3 +401,6 @@ For the research model we will test with retail dataset and the application in t
 # References
 1. Mengting et. al. 2017. “Modeling Consumer Preferences and Price Sensitivities from Large-Scale Grocery Shopping Transaction Logs”. Proceedings of the 26th International Conference on World Wide Web​
 2. "Numpyro documentation". Uber Technologies, Inc. https://num.pyro.ai/en/stable/index.html
+
+
+
