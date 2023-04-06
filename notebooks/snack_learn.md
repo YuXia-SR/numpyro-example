@@ -48,7 +48,7 @@ from sklearn.metrics import mean_absolute_percentage_error
 
 # Overview
 
-Probabilistic programming is a powerful tool for data scientists and statisticians that allows them to build complex models to make predictions based on uncertain or incomplete data. In this tutorial notebook, we will use the probabilistic programming library, Numpyro, to build a probabilistic model for predicting customer purchase probability in a retail marketing setup. The model will be based on historical data and will take into account several simple factors such as customer gender, product categories, and category visit times. Through this Snack & Learn session, we will work to implement the model, analyze the results, and discuss potential improvements. By the end of the notebook, you will have an understanding of probabilistic programming and the ability to use Numpyro to build probabilistic models for your own predictive analysis.
+Probabilistic programming is a powerful tool for data scientists and statisticians that allows them to build complex models to make predictions based on uncertain or incomplete data. In this tutorial notebook, we will use the probabilistic programming library, Numpyro, to build a probabilistic model for predicting customer purchase probability in a retail marketing setup. The model will be based on historical data and will take into account several simple factors such as customer gender, product categories, and money spent last year in one category. Through this Snack & Learn session, we will work to implement the model, analyze the results, and discuss potential improvements. By the end of the notebook, you will have an understanding of probabilistic programming and the ability to use Numpyro to build probabilistic models for your own predictive analysis.
 
 ## Review the model
 Following the same definition from the reference [1]
@@ -90,15 +90,15 @@ def generate_global_features(n_category, n_customer, normal_dist = [(1.5, 0.1),(
     # odd index -> male, even index -> female
     gender_array = jnp.array([jnp.array([1]) if i % 2 == 0 else jnp.array([-1]) for i in range(n_customer)])
     # if the customer is a male
-    # 1. his visit times of foundations is sampling from a normal distribution with mean 0.2 and std 0.1
-    # 2. his visit times of razor is sampling from a normal distribution with mean 1.5 and std 0.1
+    # 1. his money spent last year on foundations is sampling from a normal distribution with mean 0.2 and std 0.1
+    # 2. his money spent last year on razor is sampling from a normal distribution with mean 1.5 and std 0.1
     # if the customer is a female
-    # 1. her visit times of foundations is sampling from a normal distribution with mean 2.4 and std 0.1
-    # 2. her visit times of razor is sampling from a normal distribution with mean 0.2 and std 0.1
-    category_visit_array = jnp.array([jnp.array([[np.random.normal(*normal_dist[0])], [np.random.normal(*normal_dist[1])]]) if i % 2 == 0 \
+    # 1. her money spent last year on foundations is sampling from a normal distribution with mean 2.4 and std 0.1
+    # 2. her money spent last year on razor is sampling from a normal distribution with mean 0.2 and std 0.1
+    money_spent_last_year_array = jnp.array([jnp.array([[np.random.normal(*normal_dist[0])], [np.random.normal(*normal_dist[1])]]) if i % 2 == 0 \
                                      else jnp.array([[np.random.normal(*normal_dist[2])], [np.random.normal(*normal_dist[3])]]) for i in range(n_customer)])
 
-    global_feature = jnp.concatenate([gender_array.repeat(2, axis=0).reshape(n_customer, n_category, 1), category_visit_array], axis=-1)
+    global_feature = jnp.concatenate([gender_array.repeat(2, axis=0).reshape(n_customer, n_category, 1), money_spent_last_year_array], axis=-1)
     return global_feature
 np.random.seed(0)
 n_customer_test = 100
@@ -109,10 +109,10 @@ test_global_feature = generate_global_features(n_category, n_customer_test)
 ```python
 def convert_global_feature_to_df(global_feature, categories):
     n_customer, n_category, _ = global_feature.shape
-    examine_data = pd.DataFrame(jnp.concatenate([global_feature[:, i, :] for i in range(len(categories))]), columns=['gender', 'visit_times'])
+    examine_data = pd.DataFrame(jnp.concatenate([global_feature[:, i, :] for i in range(len(categories))]), columns=['gender', 'money_spent_last_year'])
     examine_data.loc[:, 'customer_id'] = np.tile(np.arange(n_customer), n_category)
     examine_data.loc[:, 'category'] = np.repeat(categories, n_customer)
-    examine_data = examine_data.loc[:, ['customer_id', 'category', 'gender', 'visit_times']].sort_values(by='customer_id', ignore_index=True)
+    examine_data = examine_data.loc[:, ['customer_id', 'category', 'gender', 'money_spent_last_year']].sort_values(by='customer_id', ignore_index=True)
     return examine_data
 global_feature_df = convert_global_feature_to_df(global_feature, ['razor', 'foundation'])
 ```
@@ -160,7 +160,7 @@ purchase_prob_test_df = convert_purchase_prob_to_df(purchase_prob_test, ['razor'
 
 ## Inspect the feature table
 
-We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations.
+We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations. The gender column has been contrast encoded with 1 representing male and -1 representing female. The column of money spent last year has been standardized by standard deviation across categories.
 
 ```python
 feature_table = global_feature_df.merge(purchase_prob_df)
@@ -170,7 +170,7 @@ feature_table.head()
 ```python
 def plot_distribution_from_df(data, target_column, ax):
     sns.violinplot(data, x='gender', y=target_column, hue='category', ax=ax)
-    target_column = 'Visit times' if target_column == 'visit_times' else 'Purchase probability'
+    target_column = 'Money spent last year' if target_column == 'money_spent_last_year' else 'Purchase probability'
     ax.set_xticks([0, 1])
     ax.set_xticklabels(['Female', 'Male'])
     ax.set_xlabel('Gender')
@@ -180,7 +180,7 @@ def plot_distribution_from_df(data, target_column, ax):
 
 ```python
 f, ax = plt.subplots(1, 2, figsize=(12, 5))
-plot_distribution_from_df(feature_table, 'visit_times', ax[0])
+plot_distribution_from_df(feature_table, 'money_spent_last_year', ax[0])
 plot_distribution_from_df(feature_table, 'purchase_probability', ax[1])
 ```
 
@@ -198,7 +198,7 @@ For the category decision, we use a hierarchical linear model to approximate the
 
 $$
 \begin{align}
-s_{ui} &= \alpha_1*Gender_{ui} + \alpha_2*VisitTimes_{ui} + \beta_u  \\
+s_{ui} &= \alpha_1*Gender_{ui} + \alpha_2*MoneySpentLastYear_{ui} + \beta_u  \\
 p_{ui} &= sigmoid(s_{ui}), \\
 y_{ui} &\sim Bernouli(p_{ui})
 \end{align}
@@ -206,12 +206,12 @@ $$
 
 where we use the following notations
 1. Gender is a global effect, and we'd like to see if customers with different genders have different purchase probability on categories. The corresponding coefficient $\alpha_1$ is shared across all customers and all categories.
-2. Visit times is also a global effect, and the corresponding coefficient $\alpha_2$ remains the same as well across all customers and all categories.
+2. Money spent last year is also a global effect, and the corresponding coefficient $\alpha_2$ remains the same as well across all customers and all categories.
 3. The interception term is with subscription of customer $u$, aiming to capture category effects caused by different customers. Thus, $\beta$ will be in shape of (n_customer, )
 
 <div style="text-align:center" heighr="400">
 
-![causalDAG](../images/causalDAG.png)
+![causalDAG](../images/causal_DAG.png)
 
 </div>
 
