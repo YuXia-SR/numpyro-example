@@ -158,7 +158,7 @@ purchase_prob_test_df = convert_purchase_prob_to_df(purchase_prob_test, ['razor'
 
 ## Inspect the feature table
 
-We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations. The gender column has been contrast encoded with 1 representing male and -1 representing female. The column of loyalty score has been standardized by standard deviation across categories.
+We could define modeling goal to be learning the purchase behavior of female and male customers on two categories: razor and makeup foundations. The gender column has been contrast encoded with 1 representing male and -1 representing female. The column of loyalty score is continuous number column.
 
 ```python
 feature_table = global_feature_df.merge(purchase_prob_df)
@@ -176,10 +176,11 @@ def plot_distribution_from_df(data, target_column, ax):
     ax.set_title(f'{target_column} distribution across category')
 ```
 
+In the synthetic dataset, we observe difference purchase probabilities on each category across customers. Female customers usually have a larger probability to purchase foundation products than razor products, while male customers will be more likely to purchase razor products.
+
 ```python
-f, ax = plt.subplots(1, 2, figsize=(12, 5))
-plot_distribution_from_df(feature_table, 'loyalty_score', ax[0])
-plot_distribution_from_df(feature_table, 'purchase_probability', ax[1])
+f, ax = plt.subplots(1, 1, figsize=(6, 5))
+plot_distribution_from_df(feature_table, 'purchase_probability', ax)
 ```
 
 We could directly pass the purchase probability matrix to bernouli distribution and sample the category choice for each customer.
