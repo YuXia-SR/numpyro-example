@@ -16,3 +16,4 @@ dependencies:
   - scikit-learn
   - statsmodels
   - jupytext
+  - pre-commit
