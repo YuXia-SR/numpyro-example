@@ -16,6 +16,8 @@ jupyter:
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
+**Disclaimer:** The information and code examples provided in this notebook are for educational and illustrative purposes only. The contents of this notebook are not intended to be a substitute for professional advice, guidance, or documentation.
+
 ```python
 !pip install numpyro
 !pip install arviz
@@ -28,6 +30,9 @@ jupyter:
 ```
 
 ```python
+import warnings
+warnings.filterwarnings('ignore')
+
 import jax.numpy as jnp
 import numpy as np
 import numpyro
@@ -77,19 +82,6 @@ def generate_global_features(
     global_feature = jnp.concatenate([gender_array.repeat(2, axis=0).reshape(n_customer, n_category, 1), money_spent_last_year_array], axis=-1)
     return global_feature
 
-def generate_category_feature(n_category, n_customer):
-    """ create category features for corresponding customers and categories
-
-    Parameters:
-        n_category (int): number of categories
-        n_customer (int): number of customers
-    
-    Returns:
-        jnp.array: category feature
-    """
-    # we assume that the category feature is a constant vector
-    return jnp.ones((n_customer, n_category, 1))
-
 def compute_purchase_probability(
         global_feature: jnp.array, 
         category_feature: jnp.array, 
@@ -136,7 +128,7 @@ def generate_features_and_target(
         tuple(jnp.array, jnp.array, jnp.array): global feature, category feature, purchase probability
     """
     global_feature = generate_global_features(n_category, n_customer, normal_dist)
-    category_feature = generate_category_feature(n_category, n_customer)
+    category_feature = jnp.ones((n_customer, n_category, 1))
     purchase_prob = compute_purchase_probability(global_feature, category_feature, global_coef, category_coef)
     return global_feature, category_feature, purchase_prob
 
@@ -443,10 +435,6 @@ nuts_kernel = NUTS(category_choice)
 mcmc = MCMC(nuts_kernel, num_warmup=100, num_samples=1000)
 rng_key = random.PRNGKey(0)
 mcmc.run(rng_key, X_global_feature, X_category_feature, sampling_y)
-```
-
-```python
-mcmc.print_summary()
 ```
 
 ## Check the model
